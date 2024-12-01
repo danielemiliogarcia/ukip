@@ -567,8 +567,6 @@ def disconnect_bluetooth_keyboards(device):
 
 
 def main(argv):
-  log.warning('[UKIP] Testing logging :)')
-
   if len(argv) > 1:
     sys.exit('Too many command-line arguments.')
 
