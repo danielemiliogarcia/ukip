@@ -505,16 +505,7 @@ def init_device_list() -> int:
 
     disconnect_bluetooth_keyboards(device)
 
-    # for attribute in device:
-    #   log.info(f"{attribute}: {device[attribute]}")
-    #   log.info(device.device_node)
-
     if device.device_node and (device.device_node.startswith('/dev/input/event')) and (device.get('ID_VENDOR_ID') and device.get('ID_MODEL_ID')):
-      # log.info("------------------------------ :)")
-      # log.info(device.device_node)
-      # log.info(device.get('ID_VENDOR_ID'))
-      # log.info(device.get('ID_MODEL_ID'))
-      # log.info("*******************************")
       try:
         vendor_id = int(device.get('ID_VENDOR_ID'), 16)
         product_id = int(device.get('ID_MODEL_ID'), 16)
