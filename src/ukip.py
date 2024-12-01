@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/emi/.ukip/bin/python3
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +25,9 @@ import logging
 import logging.handlers
 import sys
 import threading
+import subprocess
+from pickle import STRING
+
 import attr
 import enum
 import evdev
@@ -52,6 +55,12 @@ _event_devices_timings = {}
 # A dict with ringbuffers as values (holding the most recent 5 keystrokes):
 # keys are paths to the event devices.
 _event_devices_keystrokes = {}
+
+# True to disconnect bluetooth keyboard devices once detected
+DISCONNECT_BLUETOOTH_DEVICES = True
+
+# True to block bluetooth keyboard devices preventing re-connections
+BLOCK_BLUETOOTH_DEVICES = False
 
 # Window of keystrokes to look at.
 KEYSTROKE_WINDOW = 5
@@ -469,7 +478,6 @@ def monitor_device_thread(device: pyudev.Device, vendor_id: int,
   except:
     log.exception('Error monitoring device.')
 
-
 def init_device_list() -> int:
   """Adds all current event devices to the global dict of event devices.
 
@@ -494,10 +502,19 @@ def init_device_list() -> int:
     raise DeviceError('The device context and monitor could not be created.')
 
   for device in local_device_context.list_devices():
-    if device.device_node and device.device_node.startswith(
-        '/dev/input/event') and (device.get('ID_VENDOR_ID') and
-                                 device.get('ID_MODEL_ID')):
 
+    disconnect_bluetooth_keyboards(device)
+
+    # for attribute in device:
+    #   log.info(f"{attribute}: {device[attribute]}")
+    #   log.info(device.device_node)
+
+    if device.device_node and (device.device_node.startswith('/dev/input/event')) and (device.get('ID_VENDOR_ID') and device.get('ID_MODEL_ID')):
+      # log.info("------------------------------ :)")
+      # log.info(device.device_node)
+      # log.info(device.get('ID_VENDOR_ID'))
+      # log.info(device.get('ID_MODEL_ID'))
+      # log.info("*******************************")
       try:
         vendor_id = int(device.get('ID_VENDOR_ID'), 16)
         product_id = int(device.get('ID_MODEL_ID'), 16)
@@ -520,7 +537,47 @@ def init_device_list() -> int:
   return device_count
 
 
+def disconnect_bluetooth_keyboards(device):
+  # TODO, add bluetooth keyboards whitelists
+  # TODO, check key events frequency in bluetooth keyboards
+  """
+      Detects bluetooth keyboards and disconnect them
+      At this initial version it will disconnect any bluetooth keyboard connected,
+      in the future the whitelist and key counting should e checked like for USB keyboards
+  """
+  if (
+    device.get('ID_BUS') == 'bluetooth' and
+    device.get('ID_INPUT_KEYBOARD') == '1' and
+    device.get('UNIQ') is not None
+  ):
+    log.info(
+      f"Bluetooth keyboard found - Name: {device.get('NAME')} Node: {device.device_node} "
+      f"PHYS: {device.get('PHYS')} UNIQ: {device.get('UNIQ')}")
+
+    mac_address = device.get('UNIQ').replace('"', '').strip()
+
+    try:
+
+      if DISCONNECT_BLUETOOTH_DEVICES:
+        # Disconnect the Bluetooth device
+        log.info("Disconnecting device ... ")
+        subprocess.run(['bluetoothctl', 'disconnect', mac_address], check=True)
+        log.info("Disconnected device")
+
+      if BLOCK_BLUETOOTH_DEVICES:
+        # Block the device to prevent reconnection
+        log.info("Blocking device ... ")
+        subprocess.run(['bluetoothctl', 'block', mac_address], check=True)
+        log.info("Blocked device")
+    except subprocess.CalledProcessError as e:
+      log.error(f"Failed to manage device {mac_address}: {e}")
+    except Exception as e:
+      log.error(f"Unexpected error while managing device {mac_address}: {e}")
+
+
 def main(argv):
+  log.warning('[UKIP] Testing logging :)')
+
   if len(argv) > 1:
     sys.exit('Too many command-line arguments.')
 
@@ -537,6 +594,10 @@ def main(argv):
   monitor.filter_by(subsystem='input')
 
   for device in iter(monitor.poll, None):
+
+    #TODO check if this works
+    disconnect_bluetooth_keyboards(device)
+
     try:
       if device.action == 'add':
         if device.device_node and '/dev/input/event' in device.device_node and (
